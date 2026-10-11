@@ -5,3 +5,6 @@ pytest
 jinja2
 anthropic
 pydantic
+Google Gemini
+Eleven Labs
+sonata 

@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PatchTrace</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/diff2html/bundles/css/diff2html.min.css">
+<script src="https://cdn.jsdelivr.net/npm/diff2html/bundles/js/diff2html.min.js"></script>
+<style>
+  #steps li { padding: 6px 12px; border-radius: 999px; background: #1e293b; color: #94a3b8; font-size: 13px; list-style: none; }
+  #steps li.done { background: #14532d; color: #bbf7d0; }
+  #steps li.next { outline: 2px solid #60a5fa; color: #fff; }
+  .deploy:disabled { opacity: .4; cursor: not-allowed; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-100 p-6 max-w-5xl mx-auto space-y-6">
+
+<header class="flex flex-wrap gap-3 justify-between items-center">
+  <div>
+    <h1 class="text-2xl font-bold">🛡️ PatchTrace</h1>
+    <p class="text-slate-400 text-sm">AI writes the patch. PatchTrace traces the proof.</p>
+    <p class="text-slate-500 text-xs">Demo app: shop-demo</p>
+  </div>
+  <div class="text-right">
+    <p class="text-sm text-slate-400">Findings: <span id="count" class="font-bold text-white">–</span></p>
+    <button id="b1" class="mt-1 bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded">1 · Run security check</button>
+  </div>
+</header>
+
+<nav>
+  <p class="text-xs text-slate-500 mb-1">Demo path (the blue outline shows your next step):</p>
+  <ol id="steps" class="flex flex-wrap gap-2 p-0 m-0">
+    <li data-n="1">1 · Run security check</li>
+    <li data-n="2">2 · Generate AI fix</li>
+    <li data-n="3">3 · Test the BAD patch</li>
+    <li data-n="4">4 · Test the GOOD patch</li>
+    <li data-n="5">5 · Deploy to the live shop</li>
+  </ol>
+</nav>
+
+<section id="live" class="bg-slate-900 p-4 rounded border border-slate-800">
+  <div class="flex flex-wrap justify-between items-center gap-2">
+    <h2 class="font-semibold text-lg">Live shop app <span id="shopbadge" class="ml-2 text-xs px-2 py-1 rounded bg-slate-700">checking…</span></h2>
+    <a id="shoplink" href="#" target="_blank" class="text-sm underline text-blue-400">Open shop in a new tab</a>
+  </div>
+  <p class="text-sm text-slate-400 mt-1">A real website running on your computer. Try it: log in as Alice, then open order 2 (it is Bob's).</p>
+  <iframe id="shopframe" class="w-full mt-2 rounded bg-white" style="height:330px"></iframe>
+  <div class="mt-3 flex flex-wrap gap-2">
+    <button id="battack" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded">Attack the live app</button>
+    <button id="bdeploy" disabled class="deploy bg-green-600 hover:bg-green-500 px-4 py-2 rounded">Deploy verified patch to live app</button>
+    <button id="breset" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-sm">Reset to vulnerable version</button>
+  </div>
+  <p id="deploynote" class="text-xs text-slate-400 mt-2">🔒 Deploy is locked until a patch is VERIFIED.</p>
+  <div id="attacklog" class="mt-3 space-y-2 text-sm"></div>
+</section>
+
+<section id="s2" class="hidden bg-slate-900 p-4 rounded border border-slate-800">
+  <h2 class="font-semibold text-lg">Vulnerability details</h2>
+  <div id="finding" class="my-2"></div>
+  <p class="text-sm text-slate-400">Vulnerable code (the missing check is in the last route):</p>
+  <pre id="code" class="bg-black p-3 rounded text-xs overflow-auto max-h-60 mt-1"></pre>
+  <p class="text-sm text-slate-400 mt-3">Tests that reproduce the problem:</p>
+  <div id="scan-tests" class="text-sm mt-1"></div>
+    <div class="mt-3 flex flex-wrap items-center gap-2">
+    <label for="provider" class="text-sm text-slate-400">AI model:</label>
+    <select id="provider" class="bg-slate-800 border border-slate-700 rounded px-2 py-2 text-sm">
+      <option value="auto">Auto (best available)</option>
+      <option value="claude">Claude</option>
+      <option value="gemini">Gemini</option>
+      <option value="saved">Saved fix (no AI)</option>
+    </select>
+    <button id="b2" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded">2 · Generate AI fix</button>
+  </div>
+</section>
+
+<section id="s3" class="hidden bg-slate-900 p-4 rounded border border-slate-800">
+  <h2 class="font-semibold text-lg">AI fix <span id="src" class="text-xs text-slate-400"></span></h2>
+  <p class="text-sm text-slate-400">Review the proposed change. Nothing is trusted until the tests run. Now test two patches:</p>
+  <pre id="fixcode" class="bg-black p-3 rounded text-xs overflow-auto max-h-40 mt-2"></pre>
+  <div class="grid md:grid-cols-2 gap-3 mt-3">
+    <div class="bg-slate-950 p-3 rounded border border-red-900">
+      <button id="b3bad" class="w-full bg-red-700 hover:bg-red-600 px-4 py-2 rounded">3 · Test the BAD patch</button>
+      <p class="text-xs text-slate-400 mt-2">A deliberately wrong fix that blocks every customer, even the owner. Expected: <b>NOT VERIFIED</b>, and Deploy stays locked.</p>
+    </div>
+    <div class="bg-slate-950 p-3 rounded border border-green-900">
+      <button id="b3" class="w-full bg-green-600 hover:bg-green-500 px-4 py-2 rounded">4 · Test the GOOD patch (the AI fix above)</button>
+      <p class="text-xs text-slate-400 mt-2">The real fix shown above. Expected: <b>VERIFIED</b>, and Deploy unlocks.</p>
+    </div>
+  </div>
+</section>
+
+<section id="s4" class="hidden bg-slate-900 p-4 rounded border border-slate-800">
+  <h2 class="font-semibold text-lg">Security Proof Engine <span class="text-xs text-slate-400">(real pytest results)</span></h2>
+  <p class="text-sm text-slate-400">Patch tested: <b id="patchname" class="text-white"></b></p>
+  <div class="grid md:grid-cols-2 gap-4 mt-3">
+    <div class="bg-slate-950 p-3 rounded"><h3 class="text-red-400 font-semibold mb-1">Before fix</h3><div id="before" class="text-sm space-y-1"></div></div>
+    <div class="bg-slate-950 p-3 rounded"><h3 class="text-green-400 font-semibold mb-1">After fix</h3><div id="after" class="text-sm space-y-1"></div></div>
+  </div>
+</section>
+
+<section id="s5" class="hidden bg-slate-900 p-4 rounded border border-slate-800">
+  <h2 class="font-semibold text-lg">Verification verdict</h2>
+  <p id="verdict" class="text-3xl font-bold my-2"></p>
+  <ul id="checks" class="text-sm space-y-1"></ul>
+  <p id="score" class="text-sm text-slate-400 mt-1"></p>
+  <div class="mt-3 flex flex-wrap items-center gap-3">
+    <button id="bdeploy2" disabled class="deploy bg-green-600 hover:bg-green-500 px-4 py-2 rounded">Deploy verified patch to live app</button>
+    <a href="/api/report" target="_blank" class="underline text-blue-400 text-sm">Open full report (Print → Save as PDF)</a>
+    <a href="/api/report?download=true" class="underline text-blue-400 text-sm">Download report (.html)</a>
+  </div>
+  <p id="deploynote2" class="text-xs text-slate-400 mt-2"></p>
+</section>
+
+<section id="s6" class="hidden bg-slate-900 p-4 rounded border border-slate-800">
+  <h2 class="font-semibold text-lg">Patch diff</h2>
+  <div id="diff" class="bg-white text-black rounded overflow-auto mt-2"></div>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const post = (u, body) =>
+  fetch(u, {method: "POST", headers: {"Content-Type": "application/json"}, body: body ? JSON.stringify(body) : null})
+    .then(async r => {
+      try { return await r.json(); }
+      catch (e) { return {error: `Server error (HTTP ${r.status}). Look at the PowerShell window for details.`}; }
+    })
+    .catch(() => ({error: "Cannot reach PatchTrace. Is it still running in PowerShell?"}));
+const show = id => $(id).classList.remove("hidden");
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const rows = ts => ts.map(t => `<div>${t.status === "passed" ? "✅" : "❌"} ${esc(t.name)}
+  <span class="text-slate-500 text-xs">(${t.group})</span></div>`).join("");
+
+// ---- Step tracker ----
+const done = {1: false, 2: false, 3: false, 4: false, 5: false};
+function setSteps() {
+  const next = Object.keys(done).find(k => !done[k]);
+  document.querySelectorAll("#steps li").forEach(li => {
+    const n = li.dataset.n;
+    li.className = done[n] ? "done" : (n === next ? "next" : "");
+    li.textContent = (done[n] ? "✅ " : "") + li.textContent.replace(/^✅ /, "");
+  });
+}
+setSteps();
+
+// ---- Step 1 and 2 ----
+$("b1").onclick = async () => {
+  $("b1").textContent = "Scanning…";
+  const d = await post("/api/scan");
+  $("b1").textContent = "1 · Re-run security check";
+  if (d.error) { alert(d.error); return; }
+  $("count").textContent = d.finding ? "1" : "0";
+  $("finding").innerHTML = d.finding
+    ? `<b class="text-red-400">${d.finding.severity}: ${esc(d.finding.title)}</b>
+       <p class="mt-1">${esc(d.finding.plain_english)}</p>
+       <p class="text-slate-400 text-sm mt-1">Why it matters: ${esc(d.finding.why_it_matters)}</p>`
+    : "No findings.";
+  $("code").textContent = d.code;
+  $("scan-tests").innerHTML = rows(d.tests.filter(t => t.group === "security"));
+  show("s2");
+  done[1] = true; setSteps();
+  $("s2").scrollIntoView({behavior: "smooth", block: "start"});
+};
+
+$("b2").onclick = async () => {
+  $("b2").textContent = "Thinking…";
+  const f = await post("/api/propose-fix", {provider: $("provider").value});
+  $("b2").textContent = "2 · Regenerate AI fix";
+  if (f.error) { alert(f.error); return; }
+  $("src").textContent = "(source: " + f.source + ")";
+  $("fixcode").textContent = f.code;
+  show("s3");
+  done[2] = true; setSteps();
+  $("s3").scrollIntoView({behavior: "smooth", block: "start"});
+};
+
+// ---- Steps 3 and 4: test a patch ----
+function setDeploy(ok) {
+  document.querySelectorAll(".deploy").forEach(b => b.disabled = !ok);
+  const msg = ok
+    ? "✅ Verified. Deploy is unlocked. Click “Deploy verified patch to live app” (here, or in the Live shop box at the top)."
+    : "🔒 Deploy is locked because this patch is NOT VERIFIED.";
+  $("deploynote").textContent = msg;
+  $("deploynote2").textContent = msg;
+}
+
+async function runProof(kind) {
+  const btn = kind === "bad" ? $("b3bad") : $("b3");
+  const label = btn.textContent;
+  btn.textContent = "Running tests…"; btn.disabled = true;
+  const p = await post("/api/verify", kind === "bad" ? {patch: "bad"} : null);
+  btn.textContent = label; btn.disabled = false;
+  if (p.error) { setDeploy(false); alert(p.error); return; }
+
+  const ok = p.verdict === "VERIFIED";
+  $("patchname").textContent = kind === "bad" ? "the BAD demo patch" : "the AI fix (the GOOD patch)";
+  $("before").innerHTML = rows(p.before.tests);
+  $("after").innerHTML = rows(p.after.tests);
+  $("verdict").textContent = ok ? "✅ VERIFIED" : "⚠️ NOT VERIFIED";
+  $("verdict").className = "text-3xl font-bold my-2 " + (ok ? "text-green-400" : "text-yellow-400");
+  const mark = v => v ? "✅" : "❌";
+  $("checks").innerHTML =
+    `<li>${mark(p.reproduced_before)} Vulnerability reproduced before the fix</li>
+     <li>${mark(p.security_fixed)} Security tests pass after the fix</li>
+     <li>${mark(p.regression_ok)} Regression tests pass after the fix (normal use still works)</li>`;
+  const n = p.after.tests.filter(t => t.status === "passed").length;
+  $("score").textContent = `${n} of ${p.after.tests.length} tests pass after the patch`;
+  try {
+    $("diff").innerHTML = Diff2Html.html(p.diff, {drawFileList: false, outputFormat: "side-by-side"});
+  } catch (e) {
+    $("diff").innerHTML = `<pre class="p-3 text-xs">${esc(p.diff)}</pre>`;
+  }
+  ["s4", "s5", "s6"].forEach(show);
+  setDeploy(ok);
+
+  if (kind === "bad") done[3] = true;
+  if (kind !== "bad") done[4] = ok;
+  done[5] = false;
+  setSteps();
+  $("s4").scrollIntoView({behavior: "smooth", block: "start"});
+}
+$("b3bad").onclick = () => runProof("bad");
+$("b3").onclick = () => runProof("good");
+
+// ---- Live shop panel ----
+const TAGS = {
+  leaked: ["❌ LEAKED", "text-red-400"], blocked: ["✅ BLOCKED", "text-green-400"],
+  ok: ["✅ WORKS", "text-green-400"], broken: ["❌ BROKEN", "text-red-400"], error: ["⚠️ ERROR", "text-yellow-400"],
+};
+function showShop(status) {
+  const badge = $("shopbadge");
+  if (!status.running) { badge.textContent = "not running"; badge.className = "ml-2 text-xs px-2 py-1 rounded bg-slate-700"; return; }
+  badge.textContent = status.version.toUpperCase();
+  badge.className = "ml-2 text-xs px-2 py-1 rounded " + (status.version === "vulnerable" ? "bg-red-600" : "bg-green-600");
+  $("shoplink").href = status.url;
+  if (!$("shopframe").getAttribute("src")) $("shopframe").src = status.url;
+}
+function showAttacks(d, title) {
+  if (d.error) { $("attacklog").innerHTML = `<div class="text-yellow-400">${esc(d.error)}</div>`; return false; }
+  showShop(d.status);
+  $("shopframe").src = d.status.url;   // reload the shop so you see the new version
+  $("attacklog").innerHTML = `<div class="font-semibold">${title}</div>` + d.attempts.map(a => {
+    const [label, color] = TAGS[a.result];
+    return `<div class="bg-slate-950 p-2 rounded">
+      <div>${esc(a.title)} <span class="${color} font-semibold ml-2">${label}</span></div>
+      <code class="text-xs text-slate-400">${esc(a.request)} → HTTP ${a.status}</code>
+      <div class="text-xs text-slate-500 break-all">${esc(a.body)}</div></div>`;
+  }).join("");
+  return true;
+}
+$("battack").onclick = async () => {
+  $("battack").textContent = "Attacking…";
+  const d = await post("/api/shop/attack");
+  showAttacks(d, "Live attack on the " + (d.status ? d.status.version : "") + " shop:");
+  $("battack").textContent = "Attack the live app";
+};
+
+async function deploy() {
+  const btns = document.querySelectorAll(".deploy");
+  btns.forEach(b => { b.textContent = "Deploying…"; b.disabled = true; });
+  const d = await post("/api/shop/deploy-patch");
+  btns.forEach(b => { b.textContent = "Deploy verified patch to live app"; b.disabled = false; });
+  if (showAttacks(d, "Same attack after deploying the verified patch:")) {
+    done[5] = true; setSteps();
+  } else {
+    alert(d.error);
+  }
+  $("live").scrollIntoView({behavior: "smooth", block: "start"});
+}
+$("bdeploy").onclick = deploy;
+$("bdeploy2").onclick = deploy;
+
+$("breset").onclick = async () => {
+  const d = await post("/api/shop/reset");
+  showAttacks(d, "Shop reset. Same attack on the vulnerable version:");
+  done[5] = false; setSteps();
+};
+fetch("/api/shop/status").then(r => r.json()).then(showShop).catch(() => {});
+// Show which AI keys PatchTrace found
+fetch("/api/providers").then(r => r.json()).then(p => {
+  [["claude", "Claude"], ["gemini", "Gemini"]].forEach(([k, name]) => {
+    $("provider").querySelector(`option[value="${k}"]`).textContent = name + (p[k] ? " ✓ key found" : " (no key set)");
+  });
+}).catch(() => {});
+</script>
+</body>
+</html>
