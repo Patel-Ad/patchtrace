@@ -35,7 +35,7 @@ Use `python -m uvicorn` (not plain `uvicorn`) so Python can find the `backend` f
 
 ## Demo path (follow the numbered steps at the top of the dashboard)
 1. **Run security check** finds the bug.
-2. **Generate AI fix** shows the proposed patch.
+2. **Generate AI fix** shows the proposed patch along with the choice of Al Model Google Gemini or the Claude.
 3. **Test the BAD patch** is a deliberately wrong fix. Expected: NOT VERIFIED, Deploy stays locked.
 4. **Test the GOOD patch** is the AI fix. Expected: VERIFIED, Deploy unlocks.
 5. **Deploy verified patch to live app** restarts the live shop with the patch, then the same attack is blocked.
