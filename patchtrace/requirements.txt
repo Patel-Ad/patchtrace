@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+flask
+pytest
+jinja2
+anthropic
+pydantic

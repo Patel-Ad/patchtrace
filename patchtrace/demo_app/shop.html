@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ShopDemo</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, sans-serif; background: #f8fafc; color: #0f172a; }
+  header { background: #0f172a; color: #fff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+  header b { font-size: 17px; }
+  .badge { font-size: 11px; padding: 3px 8px; border-radius: 99px; background: #475569; }
+  .badge.vulnerable { background: #dc2626; } .badge.patched { background: #16a34a; }
+  main { padding: 14px 16px; max-width: 720px; margin: 0 auto; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+  select, input, button { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid #cbd5e1; }
+  button { background: #2563eb; color: #fff; border: 0; cursor: pointer; }
+  button.light { background: #e2e8f0; color: #0f172a; }
+  input { width: 90px; }
+  .order { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .out { background: #0f172a; color: #e2e8f0; border-radius: 8px; padding: 10px 12px; font: 12px/1.5 ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; }
+  .alert { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; border-radius: 8px; padding: 8px 12px; margin-top: 8px; font-weight: 600; }
+  .okmsg { background: #dcfce7; color: #166534; border: 1px solid #86efac; border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+  h3 { margin: 14px 0 6px; font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <b>🛒 ShopDemo</b>
+  <span>Version running: <span id="ver" class="badge">…</span></span>
+</header>
+<main>
+  <div class="row">
+    <label>Log in as</label>
+    <select id="user">
+      <option value="alice">Alice (customer #1)</option>
+      <option value="bob">Bob (customer #2)</option>
+    </select>
+    <button id="mine">Show my orders</button>
+  </div>
+
+  <div id="orders"></div>
+
+  <h3>Open any order by number</h3>
+  <div class="row">
+    <input id="num" type="number" min="1" value="2">
+    <button id="open">Open order</button>
+    <button id="try" class="light">Try the attack (Alice → order 2)</button>
+  </div>
+
+  <div id="out" class="out">Responses from the server appear here.</div>
+  <div id="msg"></div>
+</main>
+
+<script>
+const USERS = { alice: { token: "token-alice", id: 1, name: "Alice" }, bob: { token: "token-bob", id: 2, name: "Bob" } };
+const $ = id => document.getElementById(id);
+const me = () => USERS[$("user").value];
+
+async function call(path) {
+  const r = await fetch(path, { headers: { Authorization: "Bearer " + me().token } });
+  const text = await r.text();
+  let data = null; try { data = JSON.parse(text); } catch (e) {}
+  $("out").textContent = `${me().name} → GET ${path}\nHTTP ${r.status}\n${data ? JSON.stringify(data, null, 2) : text}`;
+  return { status: r.status, data };
+}
+
+$("mine").onclick = async () => {
+  $("msg").innerHTML = "";
+  const { data } = await call("/orders");
+  $("orders").innerHTML = (data || []).map(o =>
+    `<div class="order"><span>Order #${o.id} · ${o.item} · $${o.total}</span>
+     <button class="light" onclick="openOrder(${o.id})">Open</button></div>`).join("");
+};
+
+async function openOrder(id) {
+  const { status, data } = await call("/orders/" + id);
+  if (status === 200 && data && data.user_id !== me().id) {
+    $("msg").innerHTML = `<div class="alert">⚠️ DATA LEAK: this order belongs to customer #${data.user_id}, not to ${me().name}. The server should have refused.</div>`;
+  } else if (status === 403 || status === 404) {
+    $("msg").innerHTML = `<div class="okmsg">✅ The server refused this request (HTTP ${status}).</div>`;
+  } else { $("msg").innerHTML = ""; }
+}
+
+$("open").onclick = () => openOrder($("num").value);
+$("try").onclick = () => { $("user").value = "alice"; $("num").value = 2; openOrder(2); };
+
+fetch("/__version").then(r => r.json()).then(v => {
+  $("ver").textContent = v.version.toUpperCase(); $("ver").className = "badge " + v.version;
+});
+</script>
+</body>
+</html>
